@@ -22,4 +22,22 @@ public class ReflectionUtil {
         }
     }
 
+    public static @NotNull Collection<Object> getStaticFieldsValues(@NotNull final Class clazz) {
+        List<Object> objects = new ArrayList<>();
+
+        for (Field f : clazz.getDeclaredFields()) {
+            if (String.class != f.getType())
+                continue;
+
+            f.setAccessible(true);
+            try {
+                objects.add(f.get(null));
+            } catch (IllegalAccessException e) {
+                e.printStackTrace();
+            }
+        }
+
+        return objects;
+    }
+
 }
