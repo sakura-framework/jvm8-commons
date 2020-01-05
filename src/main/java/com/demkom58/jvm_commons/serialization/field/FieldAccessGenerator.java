@@ -1,5 +1,6 @@
 package com.demkom58.jvm_commons.serialization.field;
 
+import com.demkom58.jvm_commons.util.AsmUtil;
 import com.demkom58.jvm_commons.util.ByteClassLoader;
 import org.jetbrains.annotations.NotNull;
 import org.objectweb.asm.ClassWriter;
@@ -103,7 +104,11 @@ public class FieldAccessGenerator {
                                        @NotNull final Class type,
                                        @NotNull final String fieldName,
                                        @NotNull final Class<T> returnInterface) {
-        final String name = owner.getName().replace(".", "\\") + "-" + fieldName + "Accessor";
+        final String name = owner.getName().replace(".", "\\") + "#" + fieldName + "$LocalAccessor";
+
+        try {
+            return (Class<T>) CLASS_LOADER.loadClass(name);
+        } catch (ClassNotFoundException ignored) { }
 
         ClassWriter classWriter = new ClassWriter(0);
         classWriter.visit(Opcodes.V1_8, Opcodes.ACC_PUBLIC, name, null,
@@ -113,39 +118,47 @@ public class FieldAccessGenerator {
 
         {
             methodVisitor = classWriter.visitMethod(Opcodes.ACC_PUBLIC, "<init>", "()V", null, null);
+
             methodVisitor.visitVarInsn(Opcodes.ALOAD, 0);
             methodVisitor.visitMethodInsn(Opcodes.INVOKESPECIAL, Type.getInternalName(Object.class), "<init>", "()V", false);
             methodVisitor.visitInsn(Opcodes.RETURN);
-            methodVisitor.visitMaxs(1, 1);
-            methodVisitor.visitEnd();
-        }
-
-        {
-            methodVisitor = classWriter.visitMethod(Opcodes.ACC_PUBLIC, "get",
-                    "(" + Type.getDescriptor(Object.class) + ")" + Type.getDescriptor(type.isPrimitive() ? type : Object.class), null, null);
-            methodVisitor.visitCode();
-            methodVisitor.visitVarInsn(Opcodes.ALOAD, 1);
-            methodVisitor.visitFieldInsn(Opcodes.GETFIELD, Type.getInternalName(owner), fieldName, Type.getDescriptor(type));
-            methodVisitor.visitInsn(Opcodes.ARETURN);
             methodVisitor.visitMaxs(0, 2);
             methodVisitor.visitEnd();
         }
 
         {
-            methodVisitor = classWriter.visitMethod(Opcodes.ACC_PUBLIC, "set",
-                    "(" + Type.getDescriptor(Object.class) + Type.getDescriptor(type.isPrimitive() ? type : Object.class) + ")" + Type.getDescriptor(void.class), null, null);
+            methodVisitor = classWriter.visitMethod(Opcodes.ACC_PUBLIC, "get",
+                    "(" + Type.getDescriptor(Object.class) + ")" + Type.getDescriptor(type), null, null
+            );
+
             methodVisitor.visitCode();
             methodVisitor.visitVarInsn(Opcodes.ALOAD, 1);
-            methodVisitor.visitVarInsn(Opcodes.ALOAD, 2);
-            methodVisitor.visitFieldInsn(Opcodes.PUTFIELD, Type.getInternalName(owner), fieldName, Type.getDescriptor(type));
-            methodVisitor.visitInsn(Opcodes.RETURN);
-            methodVisitor.visitMaxs(0, 3);
+            methodVisitor.visitFieldInsn(Opcodes.GETFIELD, Type.getInternalName(owner), fieldName, Type.getDescriptor(type));
+            methodVisitor.visitInsn(AsmUtil.getReturn(type));
+            methodVisitor.visitMaxs(1, 2);
             methodVisitor.visitEnd();
         }
 
+        {
+            methodVisitor = classWriter.visitMethod(Opcodes.ACC_PUBLIC, "set",
+                    "(" + Type.getDescriptor(Object.class) + Type.getDescriptor(type) + ")"
+                            + Type.getDescriptor(void.class), null, null
+            );
+
+            methodVisitor.visitCode();
+            methodVisitor.visitVarInsn(Opcodes.ALOAD, 1);
+            methodVisitor.visitVarInsn(AsmUtil.getLoad(type), 2);
+            methodVisitor.visitFieldInsn(Opcodes.PUTFIELD, Type.getInternalName(owner), fieldName, Type.getDescriptor(type));
+            methodVisitor.visitInsn(Opcodes.RETURN);
+            methodVisitor.visitMaxs(2, 3);
+            methodVisitor.visitEnd();
+        }
 
         classWriter.visitEnd();
         return CLASS_LOADER.define(name, classWriter.toByteArray());
     }
 
+    public static ByteClassLoader getClassLoader() {
+        return CLASS_LOADER;
+    }
 }

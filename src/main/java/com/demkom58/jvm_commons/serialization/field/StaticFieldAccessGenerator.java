@@ -1,5 +1,6 @@
 package com.demkom58.jvm_commons.serialization.field;
 
+import com.demkom58.jvm_commons.util.AsmUtil;
 import org.jetbrains.annotations.NotNull;
 import org.objectweb.asm.ClassWriter;
 import org.objectweb.asm.MethodVisitor;
@@ -96,7 +97,11 @@ public class StaticFieldAccessGenerator {
                                        @NotNull final Class type,
                                        @NotNull final String fieldName,
                                        @NotNull final Class<T> returnInterface) {
-        final String name = owner.getName().replace(".", "\\") + "-" + fieldName + "StaticAccessor";
+        final String name = owner.getName().replace(".", "\\") + "#" + fieldName + "$StaticAccessor";
+
+        try {
+            return (Class<T>) FieldAccessGenerator.CLASS_LOADER.loadClass(name);
+        } catch (ClassNotFoundException ignored) { }
 
         ClassWriter classWriter = new ClassWriter(0);
         classWriter.visit(Opcodes.V1_8, Opcodes.ACC_PUBLIC, name, null,
@@ -105,7 +110,9 @@ public class StaticFieldAccessGenerator {
         MethodVisitor methodVisitor;
 
         {
-            methodVisitor = classWriter.visitMethod(Opcodes.ACC_PUBLIC, "<init>", "()V", null, null);
+            methodVisitor = classWriter.visitMethod(Opcodes.ACC_PUBLIC, "<init>",
+                    "()V", null, null);
+
             methodVisitor.visitVarInsn(Opcodes.ALOAD, 0);
             methodVisitor.visitMethodInsn(Opcodes.INVOKESPECIAL, Type.getInternalName(Object.class), "<init>", "()V", false);
             methodVisitor.visitInsn(Opcodes.RETURN);
@@ -115,19 +122,22 @@ public class StaticFieldAccessGenerator {
 
         {
             methodVisitor = classWriter.visitMethod(Opcodes.ACC_PUBLIC, "get",
-                    "()" + Type.getDescriptor(type.isPrimitive() ? type : Object.class), null, null);
+                    "()" + Type.getDescriptor(type), null, null);
+
             methodVisitor.visitCode();
             methodVisitor.visitFieldInsn(Opcodes.GETSTATIC, Type.getInternalName(owner), fieldName, Type.getDescriptor(type));
-            methodVisitor.visitInsn(Opcodes.ARETURN);
+            methodVisitor.visitInsn(AsmUtil.getReturn(type));
             methodVisitor.visitMaxs(0, 2);
             methodVisitor.visitEnd();
         }
 
         {
             methodVisitor = classWriter.visitMethod(Opcodes.ACC_PUBLIC, "set",
-                    "(" + Type.getDescriptor(type.isPrimitive() ? type : Object.class) + ")" + Type.getDescriptor(void.class), null, null);
+                    "(" + Type.getDescriptor(type) + ")" + Type.getDescriptor(void.class), null, null
+            );
+
             methodVisitor.visitCode();
-            methodVisitor.visitVarInsn(Opcodes.ALOAD, 1);
+            methodVisitor.visitVarInsn(AsmUtil.getLoad(type), 1);
             methodVisitor.visitFieldInsn(Opcodes.PUTSTATIC, Type.getInternalName(owner), fieldName, Type.getDescriptor(type));
             methodVisitor.visitInsn(Opcodes.RETURN);
             methodVisitor.visitMaxs(0, 3);
